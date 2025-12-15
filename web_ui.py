@@ -431,6 +431,7 @@ HTML_TEMPLATE = '''
                         <button class="tab-btn active" onclick="selectOrderType('market', this)">Market</button>
                         <button class="tab-btn" onclick="selectOrderType('limit', this)">Limit</button>
                         <button class="tab-btn" onclick="selectOrderType('stop', this)">Stop-Limit</button>
+                        <button class="tab-btn" onclick="selectOrderType('oco', this)">OCO</button>
                     </div>
                     
                     <form id="orderForm" onsubmit="placeOrder(event)">
@@ -462,6 +463,21 @@ HTML_TEMPLATE = '''
                                 <label>Stop Trigger Price ($)</label>
                                 <input type="number" id="stopPrice" step="0.01" placeholder="Trigger price">
                             </div>
+                        </div>
+                        
+                        <div class="form-row hidden" id="ocoRow">
+                            <div class="form-group">
+                                <label>Take Profit Price ($)</label>
+                                <input type="number" id="tpPrice" step="0.01" placeholder="TP price">
+                            </div>
+                            <div class="form-group">
+                                <label>Stop Loss Price ($)</label>
+                                <input type="number" id="slPrice" step="0.01" placeholder="SL trigger">
+                            </div>
+                        </div>
+                        
+                        <div id="ocoNote" class="hidden" style="font-size: 0.8rem; color: #888; margin-bottom: 10px;">
+                            ℹ️ OCO places both Take-Profit and Stop-Loss orders. When one executes, close the other manually.
                         </div>
                         
                         <div class="btn-row">
@@ -499,8 +515,10 @@ HTML_TEMPLATE = '''
             btn.classList.add('active');
             document.getElementById('orderType').value = type;
             
-            document.getElementById('priceRow').classList.toggle('hidden', type === 'market');
+            document.getElementById('priceRow').classList.toggle('hidden', type === 'market' || type === 'oco');
             document.getElementById('stopPriceRow').classList.toggle('hidden', type !== 'stop');
+            document.getElementById('ocoRow').classList.toggle('hidden', type !== 'oco');
+            document.getElementById('ocoNote').classList.toggle('hidden', type !== 'oco');
         }
         
         async function loadAccount() {
@@ -586,6 +604,8 @@ HTML_TEMPLATE = '''
             const quantity = parseFloat(document.getElementById('quantity').value);
             const price = parseFloat(document.getElementById('price').value) || null;
             const stopPrice = parseFloat(document.getElementById('stopPrice').value) || null;
+            const tpPrice = parseFloat(document.getElementById('tpPrice').value) || null;
+            const slPrice = parseFloat(document.getElementById('slPrice').value) || null;
             
             const resultEl = document.getElementById('result');
             resultEl.className = 'result-msg';
@@ -596,7 +616,7 @@ HTML_TEMPLATE = '''
                 const res = await fetch('/api/order', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ type, symbol, side, quantity, price, stopPrice })
+                    body: JSON.stringify({ type, symbol, side, quantity, price, stopPrice, tpPrice, slPrice })
                 });
                 
                 const data = await res.json();
@@ -606,7 +626,11 @@ HTML_TEMPLATE = '''
                     resultEl.textContent = '❌ ' + data.error;
                 } else {
                     resultEl.className = 'result-msg success';
-                    resultEl.textContent = '✅ ' + side + ' order placed! ID: ' + data.orderId;
+                    if (type === 'oco') {
+                        resultEl.textContent = '✅ OCO orders placed! TP + SL active';
+                    } else {
+                        resultEl.textContent = '✅ ' + side + ' order placed! ID: ' + data.orderId;
+                    }
                     loadAll();
                 }
             } catch (e) {
@@ -682,6 +706,8 @@ def api_order():
         quantity = data.get('quantity')
         price = data.get('price')
         stop_price = data.get('stopPrice')
+        tp_price = data.get('tpPrice')
+        sl_price = data.get('slPrice')
         
         b = get_bot()
         
@@ -694,6 +720,11 @@ def api_order():
         elif order_type == 'stop':
             order = b.place_stop_limit_order(symbol, side, quantity, price, stop_price)
             add_log(f'STOP {side}', f'{quantity} {symbol} trigger ${stop_price}')
+        elif order_type == 'oco':
+            # OCO: place both take-profit and stop-loss
+            orders = b.place_oco_order(symbol, side, quantity, tp_price, sl_price, sl_price * 0.995)
+            add_log(f'OCO {side}', f'{quantity} {symbol} TP:${tp_price} SL:${sl_price}')
+            return jsonify({'orderId': 'OCO', 'orders': len(orders)})
         else:
             return jsonify({'error': f'Unknown order type'}), 400
         
