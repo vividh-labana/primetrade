@@ -6,6 +6,7 @@ A lightweight Flask-based frontend for placing orders.
 
 from flask import Flask, render_template_string, request, jsonify
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 from bot import BasicBot
 from logger import setup_logger
@@ -17,6 +18,7 @@ app = Flask(__name__)
 
 # Initialize bot
 bot = None
+trade_log = []  # Store trade history
 
 def get_bot():
     global bot
@@ -25,6 +27,18 @@ def get_bot():
         api_secret = os.getenv('BINANCE_API_SECRET')
         bot = BasicBot(api_key, api_secret, testnet=True)
     return bot
+
+def add_log(action, details, success=True):
+    """Add entry to trade log"""
+    trade_log.insert(0, {
+        'time': datetime.now().strftime('%H:%M:%S'),
+        'action': action,
+        'details': details,
+        'success': success
+    })
+    # Keep only last 20 entries
+    if len(trade_log) > 20:
+        trade_log.pop()
 
 # HTML Template
 HTML_TEMPLATE = '''
@@ -35,126 +49,125 @@ HTML_TEMPLATE = '''
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PrimeTrade - Trading Bot</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0d1421 0%, #1a2332 100%);
             min-height: 100vh;
             color: #e4e4e4;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
             padding: 20px;
         }
         
+        .container { max-width: 1400px; margin: 0 auto; }
+        
         header {
             text-align: center;
-            padding: 30px 0;
-            border-bottom: 1px solid #333;
-            margin-bottom: 30px;
+            padding: 20px 0 30px;
         }
         
         h1 {
-            font-size: 2.5rem;
-            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            font-size: 2rem;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
         }
         
-        .subtitle {
-            color: #888;
-            font-size: 0.9rem;
-        }
+        .subtitle { color: #666; font-size: 0.9rem; }
         
         .testnet-badge {
             display: inline-block;
-            background: #ff6b35;
+            background: #e74c3c;
             color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            margin-top: 10px;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 0.75rem;
+            margin-top: 8px;
         }
         
-        .dashboard {
+        .main-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: 1fr 400px;
             gap: 20px;
-            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 900px) {
+            .main-grid { grid-template-columns: 1fr; }
         }
         
         .card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
         
         .card h2 {
-            font-size: 1.2rem;
-            margin-bottom: 20px;
+            font-size: 1rem;
             color: #00d4ff;
+            margin-bottom: 15px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
         
-        .stat {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .stat:last-child {
-            border-bottom: none;
-        }
-        
-        .stat-label {
-            color: #888;
-        }
-        
-        .stat-value {
-            font-weight: bold;
-            color: #00ff88;
-        }
-        
-        .stat-value.negative {
-            color: #ff4757;
-        }
-        
-        .order-form {
+        /* Stats Row */
+        .stats-row {
             display: grid;
+            grid-template-columns: repeat(4, 1fr);
             gap: 15px;
+            margin-bottom: 20px;
         }
         
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
+        .stat-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
         
-        label {
-            font-size: 0.85rem;
-            color: #888;
+        .stat-label { color: #666; font-size: 0.8rem; margin-bottom: 5px; }
+        .stat-value { font-size: 1.3rem; font-weight: bold; color: #00ff88; }
+        .stat-value.negative { color: #ff4757; }
+        .stat-value.price { color: #00d4ff; }
+        
+        /* Trading Panel */
+        .trading-panel { display: flex; flex-direction: column; gap: 20px; }
+        
+        .order-section {
+            background: rgba(0, 212, 255, 0.05);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
         }
+        
+        .order-section h3 {
+            color: #00d4ff;
+            font-size: 0.95rem;
+            margin-bottom: 15px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group.full { grid-column: span 2; }
+        
+        label { font-size: 0.8rem; color: #888; }
         
         input, select {
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            background: rgba(255, 255, 255, 0.05);
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.3);
             color: white;
-            font-size: 1rem;
+            font-size: 0.95rem;
         }
         
         input:focus, select:focus {
@@ -162,410 +175,468 @@ HTML_TEMPLATE = '''
             border-color: #00d4ff;
         }
         
-        .btn-group {
+        .btn-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
-            margin-top: 10px;
+            margin-top: 15px;
         }
         
-        button {
-            padding: 15px;
+        .btn {
+            padding: 12px;
             border: none;
-            border-radius: 8px;
-            font-size: 1rem;
+            border-radius: 6px;
+            font-size: 0.95rem;
             font-weight: bold;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
         }
         
         .btn-buy {
-            background: linear-gradient(135deg, #00b894, #00cec9);
+            background: linear-gradient(135deg, #00b894, #00a085);
             color: white;
         }
         
         .btn-sell {
-            background: linear-gradient(135deg, #e17055, #d63031);
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
             color: white;
         }
         
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        .btn:hover { transform: translateY(-1px); opacity: 0.9; }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
         
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            grid-column: span 2;
-        }
-        
-        #result {
-            margin-top: 20px;
+        /* How It Works */
+        .how-it-works {
+            background: rgba(0, 255, 136, 0.05);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            border-radius: 10px;
             padding: 15px;
-            border-radius: 8px;
-            display: none;
+            margin-bottom: 20px;
         }
         
-        #result.success {
-            display: block;
-            background: rgba(0, 255, 136, 0.1);
-            border: 1px solid #00ff88;
+        .how-it-works h3 {
+            color: #00ff88;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
         }
         
-        #result.error {
-            display: block;
-            background: rgba(255, 71, 87, 0.1);
-            border: 1px solid #ff4757;
+        .how-it-works ul {
+            list-style: none;
+            font-size: 0.85rem;
+            color: #aaa;
         }
         
+        .how-it-works li {
+            padding: 4px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .how-it-works li::before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #00ff88;
+        }
+        
+        /* Activity Log */
+        .activity-log {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.85rem;
+        }
+        
+        .log-time { color: #666; min-width: 60px; }
+        .log-action { color: #00d4ff; min-width: 80px; font-weight: 500; }
+        .log-details { color: #aaa; flex: 1; }
+        .log-entry.error .log-action { color: #ff4757; }
+        .log-entry.success .log-action { color: #00ff88; }
+        
+        /* Positions Table */
         .positions-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
-            table-layout: fixed;
-        }
-        
-        .positions-table th, .positions-table td {
-            padding: 10px 8px;
-            text-align: left;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             font-size: 0.9rem;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .positions-table th:last-child,
-        .positions-table td:last-child {
-            text-align: right;
         }
         
         .positions-table th {
-            color: #888;
+            text-align: left;
+            padding: 10px;
+            color: #666;
             font-weight: normal;
-            font-size: 0.8rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
         
-        #positions {
-            overflow-x: auto;
+        .positions-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
+        
+        .positions-table td:last-child { text-align: right; }
         
         .long { color: #00ff88; }
         .short { color: #ff4757; }
         
-        .auto-refresh-status {
-            font-size: 0.75rem;
-            color: #00ff88;
-            margin-left: 10px;
-        }
-        
-        .refresh-btn {
-            background: rgba(0, 212, 255, 0.2);
-            border: 1px solid #00d4ff;
-            color: #00d4ff;
-            padding: 8px 15px;
-            border-radius: 5px;
+        .close-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
             cursor: pointer;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
         }
         
-        .price-display {
-            font-size: 2rem;
-            font-weight: bold;
+        .close-btn:hover { background: #c0392b; }
+        
+        /* Result Message */
+        .result-msg {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            display: none;
+        }
+        
+        .result-msg.success {
+            display: block;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88;
             color: #00ff88;
-            text-align: center;
-            padding: 20px 0;
         }
         
-        .order-types {
+        .result-msg.error {
+            display: block;
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid #ff4757;
+            color: #ff4757;
+        }
+        
+        .no-positions {
+            color: #666;
+            text-align: center;
+            padding: 30px;
+        }
+        
+        .order-type-tabs {
             display: flex;
-            gap: 10px;
+            gap: 5px;
             margin-bottom: 15px;
         }
         
-        .order-type-btn {
+        .tab-btn {
             flex: 1;
-            padding: 10px;
+            padding: 8px;
             background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             color: #888;
+            border-radius: 5px;
             cursor: pointer;
-            transition: all 0.3s;
+            font-size: 0.85rem;
+            transition: all 0.2s;
         }
         
-        .order-type-btn.active {
+        .tab-btn.active {
             background: rgba(0, 212, 255, 0.2);
             border-color: #00d4ff;
             color: #00d4ff;
         }
         
-        .hidden {
-            display: none !important;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .loading {
-            animation: pulse 1s infinite;
-        }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🚀 PrimeTrade</h1>
-            <p class="subtitle">Binance Futures Trading Bot</p>
-            <span class="testnet-badge">⚠️ TESTNET MODE</span>
+            <h1>🤖 PrimeTrade Bot</h1>
+            <p class="subtitle">Binance Futures Trading Bot Interface</p>
+            <span class="testnet-badge">⚠️ TESTNET - Fake Money</span>
         </header>
         
-        <div class="dashboard">
-            <!-- Account Info -->
-            <div class="card">
-                <h2>💰 Account</h2>
-                <div class="stat">
-                    <span class="stat-label">Balance</span>
-                    <span class="stat-value" id="balance">Loading...</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">Available</span>
-                    <span class="stat-value" id="available">Loading...</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">Unrealized PnL</span>
-                    <span class="stat-value" id="pnl">Loading...</span>
-                </div>
-                <button class="refresh-btn" onclick="loadAccount()" style="margin-top: 15px;">🔄 Refresh</button>
-                <span class="auto-refresh-status">● Auto-refresh: 3s</span>
+        <!-- Stats Row -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-label">💰 Balance</div>
+                <div class="stat-value" id="balance">$0.00</div>
             </div>
-            
-            <!-- Price Display -->
-            <div class="card">
-                <h2>📊 Market Price</h2>
-                <div class="form-group">
-                    <select id="priceSymbol" onchange="loadPrice()">
-                        <option value="BTCUSDT">BTCUSDT</option>
-                        <option value="ETHUSDT">ETHUSDT</option>
-                        <option value="BNBUSDT">BNBUSDT</option>
-                        <option value="SOLUSDT">SOLUSDT</option>
-                    </select>
-                </div>
-                <div class="price-display" id="currentPrice">$0.00</div>
-                <button class="refresh-btn" onclick="loadPrice()">🔄 Refresh Price</button>
+            <div class="stat-card">
+                <div class="stat-label">📊 Available</div>
+                <div class="stat-value" id="available">$0.00</div>
             </div>
-            
-            <!-- Place Order -->
-            <div class="card">
-                <h2>📝 Place Order</h2>
-                
-                <div class="order-types">
-                    <button class="order-type-btn active" onclick="selectOrderType('market')">Market</button>
-                    <button class="order-type-btn" onclick="selectOrderType('limit')">Limit</button>
-                    <button class="order-type-btn" onclick="selectOrderType('stop')">Stop-Limit</button>
+            <div class="stat-card">
+                <div class="stat-label">📈 Unrealized PnL</div>
+                <div class="stat-value" id="pnl">$0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">💹 BTC Price</div>
+                <div class="stat-value price" id="btcPrice">$0.00</div>
+            </div>
+        </div>
+        
+        <div class="main-grid">
+            <!-- Left Column -->
+            <div>
+                <!-- Open Positions -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <h2>📊 Open Positions</h2>
+                    <div id="positions">
+                        <div class="no-positions">No open positions</div>
+                    </div>
                 </div>
                 
-                <form class="order-form" onsubmit="placeOrder(event)">
-                    <input type="hidden" id="orderType" value="market">
-                    
-                    <div class="form-group">
-                        <label>Symbol</label>
-                        <select id="symbol">
-                            <option value="BTCUSDT">BTCUSDT</option>
-                            <option value="ETHUSDT">ETHUSDT</option>
-                            <option value="BNBUSDT">BNBUSDT</option>
-                            <option value="SOLUSDT">SOLUSDT</option>
-                        </select>
+                <!-- Activity Log -->
+                <div class="card">
+                    <h2>📋 Activity Log</h2>
+                    <div class="activity-log" id="activityLog">
+                        <div class="log-entry">
+                            <span class="log-time">--:--</span>
+                            <span class="log-action">INFO</span>
+                            <span class="log-details">Bot ready. Place an order to start trading.</span>
+                        </div>
                     </div>
-                    
-                    <div class="form-group">
-                        <label>Quantity</label>
-                        <input type="number" id="quantity" step="0.001" min="0.001" value="0.002" required>
-                    </div>
-                    
-                    <div class="form-group hidden" id="priceGroup">
-                        <label>Price</label>
-                        <input type="number" id="price" step="0.01" min="0">
-                    </div>
-                    
-                    <div class="form-group hidden" id="stopPriceGroup">
-                        <label>Stop Price (Trigger)</label>
-                        <input type="number" id="stopPrice" step="0.01" min="0">
-                    </div>
-                    
-                    <div class="btn-group">
-                        <button type="submit" class="btn-buy" onclick="document.getElementById('side').value='BUY'">
-                            📈 BUY / LONG
-                        </button>
-                        <button type="submit" class="btn-sell" onclick="document.getElementById('side').value='SELL'">
-                            📉 SELL / SHORT
-                        </button>
-                    </div>
-                    <input type="hidden" id="side" value="BUY">
-                </form>
-                
-                <div id="result"></div>
+                </div>
             </div>
             
-            <!-- Positions -->
-            <div class="card" style="grid-column: span 2;">
-                <h2>📈 Open Positions</h2>
-                <button class="refresh-btn" onclick="loadPositions()" style="margin-bottom: 15px;">🔄 Refresh</button>
-                <div id="positions">
-                    <p style="color: #888;">No positions</p>
+            <!-- Right Column - Trading Panel -->
+            <div class="trading-panel">
+                <!-- How It Works -->
+                <div class="how-it-works">
+                    <h3>📖 How It Works</h3>
+                    <ul>
+                        <li><strong>BUY/LONG</strong> = Bet price goes UP ↑</li>
+                        <li><strong>SELL/SHORT</strong> = Bet price goes DOWN ↓</li>
+                        <li><strong>Market</strong> = Execute immediately at current price</li>
+                        <li><strong>Limit</strong> = Execute when price reaches your target</li>
+                        <li><strong>Close Position</strong> = Exit and take profit/loss</li>
+                    </ul>
+                </div>
+                
+                <!-- Place Order -->
+                <div class="order-section">
+                    <h3>🚀 Place Order</h3>
+                    
+                    <div class="order-type-tabs">
+                        <button class="tab-btn active" onclick="selectOrderType('market', this)">Market</button>
+                        <button class="tab-btn" onclick="selectOrderType('limit', this)">Limit</button>
+                        <button class="tab-btn" onclick="selectOrderType('stop', this)">Stop-Limit</button>
+                    </div>
+                    
+                    <form id="orderForm" onsubmit="placeOrder(event)">
+                        <input type="hidden" id="orderType" value="market">
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Symbol</label>
+                                <select id="symbol">
+                                    <option value="BTCUSDT">BTCUSDT</option>
+                                    <option value="ETHUSDT">ETHUSDT</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Quantity</label>
+                                <input type="number" id="quantity" step="0.001" min="0.001" value="0.002" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row hidden" id="priceRow">
+                            <div class="form-group full">
+                                <label>Limit Price ($)</label>
+                                <input type="number" id="price" step="0.01" placeholder="Enter price">
+                            </div>
+                        </div>
+                        
+                        <div class="form-row hidden" id="stopPriceRow">
+                            <div class="form-group full">
+                                <label>Stop Trigger Price ($)</label>
+                                <input type="number" id="stopPrice" step="0.01" placeholder="Trigger price">
+                            </div>
+                        </div>
+                        
+                        <div class="btn-row">
+                            <button type="button" class="btn btn-buy" onclick="submitOrder('BUY')">
+                                📈 BUY / LONG
+                            </button>
+                            <button type="button" class="btn btn-sell" onclick="submitOrder('SELL')">
+                                📉 SELL / SHORT
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <div class="result-msg" id="result"></div>
                 </div>
             </div>
         </div>
     </div>
     
     <script>
-        // Load data on page load and set up auto-refresh
+        // Load data on page load
         document.addEventListener('DOMContentLoaded', function() {
+            loadAll();
+            setInterval(loadAll, 3000);  // Auto-refresh every 3s
+        });
+        
+        function loadAll() {
             loadAccount();
             loadPrice();
             loadPositions();
-            
-            // Auto-refresh every 3 seconds
-            setInterval(() => {
-                loadAccount();
-                loadPrice();
-                loadPositions();
-            }, 3000);
-        });
+            loadActivityLog();
+        }
         
-        function selectOrderType(type) {
-            document.querySelectorAll('.order-type-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+        function selectOrderType(type, btn) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
             document.getElementById('orderType').value = type;
             
-            const priceGroup = document.getElementById('priceGroup');
-            const stopPriceGroup = document.getElementById('stopPriceGroup');
-            
-            if (type === 'market') {
-                priceGroup.classList.add('hidden');
-                stopPriceGroup.classList.add('hidden');
-            } else if (type === 'limit') {
-                priceGroup.classList.remove('hidden');
-                stopPriceGroup.classList.add('hidden');
-            } else if (type === 'stop') {
-                priceGroup.classList.remove('hidden');
-                stopPriceGroup.classList.remove('hidden');
-            }
+            document.getElementById('priceRow').classList.toggle('hidden', type === 'market');
+            document.getElementById('stopPriceRow').classList.toggle('hidden', type !== 'stop');
         }
         
         async function loadAccount() {
             try {
-                const response = await fetch('/api/account');
-                const data = await response.json();
+                const res = await fetch('/api/account');
+                const data = await res.json();
                 
                 document.getElementById('balance').textContent = '$' + parseFloat(data.totalWalletBalance).toFixed(2);
                 document.getElementById('available').textContent = '$' + parseFloat(data.availableBalance).toFixed(2);
                 
                 const pnl = parseFloat(data.totalUnrealizedProfit);
                 const pnlEl = document.getElementById('pnl');
-                pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(4);
+                pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
                 pnlEl.className = 'stat-value ' + (pnl >= 0 ? '' : 'negative');
-            } catch (e) {
-                console.error('Error loading account:', e);
-            }
+            } catch (e) { console.error(e); }
         }
         
         async function loadPrice() {
-            const symbol = document.getElementById('priceSymbol').value;
             try {
-                const response = await fetch('/api/price/' + symbol);
-                const data = await response.json();
-                document.getElementById('currentPrice').textContent = '$' + parseFloat(data.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-            } catch (e) {
-                console.error('Error loading price:', e);
-            }
+                const res = await fetch('/api/price/BTCUSDT');
+                const data = await res.json();
+                document.getElementById('btcPrice').textContent = '$' + parseFloat(data.price).toLocaleString();
+            } catch (e) { console.error(e); }
         }
         
         async function loadPositions() {
             try {
-                const response = await fetch('/api/positions');
-                const positions = await response.json();
-                
+                const res = await fetch('/api/positions');
+                const positions = await res.json();
                 const container = document.getElementById('positions');
                 
-                if (positions.length === 0) {
-                    container.innerHTML = '<p style="color: #888;">No open positions</p>';
+                if (!positions.length) {
+                    container.innerHTML = '<div class="no-positions">No open positions - Place an order to start!</div>';
                     return;
                 }
                 
-                let html = '<table class="positions-table"><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>PnL</th></tr>';
+                let html = '<table class="positions-table"><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>PnL</th><th></th></tr>';
                 
                 positions.forEach(pos => {
                     const amt = parseFloat(pos.positionAmt) || 0;
                     const side = amt > 0 ? 'LONG' : 'SHORT';
-                    const sideClass = amt > 0 ? 'long' : 'short';
                     const pnl = parseFloat(pos.unRealizedProfit) || parseFloat(pos.unrealizedProfit) || 0;
-                    const pnlClass = pnl >= 0 ? 'long' : 'short';
-                    const entryPrice = parseFloat(pos.entryPrice) || 0;
+                    const entry = parseFloat(pos.entryPrice) || 0;
                     
                     html += `<tr>
                         <td>${pos.symbol}</td>
-                        <td class="${sideClass}">${side}</td>
+                        <td class="${amt > 0 ? 'long' : 'short'}">${side}</td>
                         <td>${Math.abs(amt).toFixed(4)}</td>
-                        <td>$${entryPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                        <td class="${pnlClass}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
+                        <td>$${entry.toLocaleString()}</td>
+                        <td class="${pnl >= 0 ? 'long' : 'short'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
+                        <td><button class="close-btn" onclick="closePosition('${pos.symbol}', ${Math.abs(amt)}, '${amt > 0 ? 'SELL' : 'BUY'}')">Close</button></td>
                     </tr>`;
                 });
                 
-                html += '</table>';
-                container.innerHTML = html;
-            } catch (e) {
-                console.error('Error loading positions:', e);
-            }
+                container.innerHTML = html + '</table>';
+            } catch (e) { console.error(e); }
         }
         
-        async function placeOrder(event) {
-            event.preventDefault();
-            
-            const orderType = document.getElementById('orderType').value;
+        async function loadActivityLog() {
+            try {
+                const res = await fetch('/api/logs');
+                const logs = await res.json();
+                const container = document.getElementById('activityLog');
+                
+                if (!logs.length) {
+                    container.innerHTML = '<div class="log-entry"><span class="log-time">--:--</span><span class="log-action">INFO</span><span class="log-details">Bot ready.</span></div>';
+                    return;
+                }
+                
+                container.innerHTML = logs.map(log => `
+                    <div class="log-entry ${log.success ? 'success' : 'error'}">
+                        <span class="log-time">${log.time}</span>
+                        <span class="log-action">${log.action}</span>
+                        <span class="log-details">${log.details}</span>
+                    </div>
+                `).join('');
+            } catch (e) { console.error(e); }
+        }
+        
+        async function submitOrder(side) {
+            const type = document.getElementById('orderType').value;
             const symbol = document.getElementById('symbol').value;
-            const side = document.getElementById('side').value;
-            const quantity = document.getElementById('quantity').value;
-            const price = document.getElementById('price').value;
-            const stopPrice = document.getElementById('stopPrice').value;
+            const quantity = parseFloat(document.getElementById('quantity').value);
+            const price = parseFloat(document.getElementById('price').value) || null;
+            const stopPrice = parseFloat(document.getElementById('stopPrice').value) || null;
             
             const resultEl = document.getElementById('result');
-            resultEl.className = '';
-            resultEl.style.display = 'none';
+            resultEl.className = 'result-msg';
+            resultEl.textContent = '⏳ Placing order...';
+            resultEl.style.display = 'block';
             
             try {
-                const response = await fetch('/api/order', {
+                const res = await fetch('/api/order', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        type: orderType,
-                        symbol: symbol,
-                        side: side,
-                        quantity: parseFloat(quantity),
-                        price: price ? parseFloat(price) : null,
-                        stopPrice: stopPrice ? parseFloat(stopPrice) : null
-                    })
+                    body: JSON.stringify({ type, symbol, side, quantity, price, stopPrice })
                 });
                 
-                const data = await response.json();
+                const data = await res.json();
                 
                 if (data.error) {
-                    resultEl.className = 'error';
+                    resultEl.className = 'result-msg error';
                     resultEl.textContent = '❌ ' + data.error;
                 } else {
-                    resultEl.className = 'success';
-                    resultEl.textContent = '✅ Order placed! ID: ' + data.orderId;
-                    loadAccount();
-                    loadPositions();
+                    resultEl.className = 'result-msg success';
+                    resultEl.textContent = '✅ ' + side + ' order placed! ID: ' + data.orderId;
+                    loadAll();
                 }
             } catch (e) {
-                resultEl.className = 'error';
+                resultEl.className = 'result-msg error';
                 resultEl.textContent = '❌ Error: ' + e.message;
             }
+            
+            setTimeout(() => { resultEl.style.display = 'none'; }, 5000);
         }
+        
+        async function closePosition(symbol, quantity, side) {
+            if (!confirm('Close this position?')) return;
+            
+            try {
+                const res = await fetch('/api/order', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ type: 'market', symbol, side, quantity })
+                });
+                
+                const data = await res.json();
+                if (data.error) alert('Error: ' + data.error);
+                else {
+                    alert('Position closed!');
+                    loadAll();
+                }
+            } catch (e) { alert('Error: ' + e.message); }
+        }
+        
+        function placeOrder(e) { e.preventDefault(); }
     </script>
 </body>
 </html>
@@ -578,8 +649,7 @@ def index():
 @app.route('/api/account')
 def api_account():
     try:
-        account = get_bot().get_account_info()
-        return jsonify(account)
+        return jsonify(get_bot().get_account_info())
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -594,10 +664,13 @@ def api_price(symbol):
 @app.route('/api/positions')
 def api_positions():
     try:
-        positions = get_bot().get_positions()
-        return jsonify(positions)
+        return jsonify(get_bot().get_positions())
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs')
+def api_logs():
+    return jsonify(trade_log)
 
 @app.route('/api/order', methods=['POST'])
 def api_order():
@@ -610,36 +683,30 @@ def api_order():
         price = data.get('price')
         stop_price = data.get('stopPrice')
         
-        bot = get_bot()
+        b = get_bot()
         
         if order_type == 'market':
-            order = bot.place_market_order(symbol, side, quantity)
+            order = b.place_market_order(symbol, side, quantity)
+            add_log(f'MARKET {side}', f'{quantity} {symbol} @ market price')
         elif order_type == 'limit':
-            order = bot.place_limit_order(symbol, side, quantity, price)
+            order = b.place_limit_order(symbol, side, quantity, price)
+            add_log(f'LIMIT {side}', f'{quantity} {symbol} @ ${price}')
         elif order_type == 'stop':
-            order = bot.place_stop_limit_order(symbol, side, quantity, price, stop_price)
+            order = b.place_stop_limit_order(symbol, side, quantity, price, stop_price)
+            add_log(f'STOP {side}', f'{quantity} {symbol} trigger ${stop_price}')
         else:
-            return jsonify({'error': f'Unknown order type: {order_type}'}), 400
+            return jsonify({'error': f'Unknown order type'}), 400
         
         return jsonify(order)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/orders')
-def api_orders():
-    try:
-        orders = get_bot().get_open_orders()
-        return jsonify(orders)
-    except Exception as e:
+        add_log('ERROR', str(e), success=False)
         return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
     setup_logger()
-    print("\n🚀 PrimeTrade Web UI")
+    print("\n🤖 PrimeTrade Bot - Web UI")
     print("=" * 40)
-    print("Open in browser: http://localhost:5000")
+    print("Open: http://localhost:5000")
     print("=" * 40)
-    print("\nPress Ctrl+C to stop\n")
     app.run(debug=True, port=5000)
-
