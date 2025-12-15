@@ -223,21 +223,42 @@ HTML_TEMPLATE = '''
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
+            table-layout: fixed;
         }
         
         .positions-table th, .positions-table td {
-            padding: 12px;
+            padding: 10px 8px;
             text-align: left;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.9rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .positions-table th:last-child,
+        .positions-table td:last-child {
+            text-align: right;
         }
         
         .positions-table th {
             color: #888;
             font-weight: normal;
+            font-size: 0.8rem;
+        }
+        
+        #positions {
+            overflow-x: auto;
         }
         
         .long { color: #00ff88; }
         .short { color: #ff4757; }
+        
+        .auto-refresh-status {
+            font-size: 0.75rem;
+            color: #00ff88;
+            margin-left: 10px;
+        }
         
         .refresh-btn {
             background: rgba(0, 212, 255, 0.2);
@@ -319,6 +340,7 @@ HTML_TEMPLATE = '''
                     <span class="stat-value" id="pnl">Loading...</span>
                 </div>
                 <button class="refresh-btn" onclick="loadAccount()" style="margin-top: 15px;">🔄 Refresh</button>
+                <span class="auto-refresh-status">● Auto-refresh: 3s</span>
             </div>
             
             <!-- Price Display -->
@@ -389,7 +411,7 @@ HTML_TEMPLATE = '''
             </div>
             
             <!-- Positions -->
-            <div class="card">
+            <div class="card" style="grid-column: span 2;">
                 <h2>📈 Open Positions</h2>
                 <button class="refresh-btn" onclick="loadPositions()" style="margin-bottom: 15px;">🔄 Refresh</button>
                 <div id="positions">
@@ -400,11 +422,18 @@ HTML_TEMPLATE = '''
     </div>
     
     <script>
-        // Load data on page load
+        // Load data on page load and set up auto-refresh
         document.addEventListener('DOMContentLoaded', function() {
             loadAccount();
             loadPrice();
             loadPositions();
+            
+            // Auto-refresh every 3 seconds
+            setInterval(() => {
+                loadAccount();
+                loadPrice();
+                loadPositions();
+            }, 3000);
         });
         
         function selectOrderType(type) {
@@ -470,18 +499,19 @@ HTML_TEMPLATE = '''
                 let html = '<table class="positions-table"><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>PnL</th></tr>';
                 
                 positions.forEach(pos => {
-                    const amt = parseFloat(pos.positionAmt);
+                    const amt = parseFloat(pos.positionAmt) || 0;
                     const side = amt > 0 ? 'LONG' : 'SHORT';
                     const sideClass = amt > 0 ? 'long' : 'short';
-                    const pnl = parseFloat(pos.unrealizedProfit);
+                    const pnl = parseFloat(pos.unRealizedProfit) || parseFloat(pos.unrealizedProfit) || 0;
                     const pnlClass = pnl >= 0 ? 'long' : 'short';
+                    const entryPrice = parseFloat(pos.entryPrice) || 0;
                     
                     html += `<tr>
                         <td>${pos.symbol}</td>
                         <td class="${sideClass}">${side}</td>
-                        <td>${Math.abs(amt)}</td>
-                        <td>$${parseFloat(pos.entryPrice).toFixed(2)}</td>
-                        <td class="${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(4)}</td>
+                        <td>${Math.abs(amt).toFixed(4)}</td>
+                        <td>$${entryPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td class="${pnlClass}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
                     </tr>`;
                 });
                 
