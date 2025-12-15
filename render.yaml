@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: primetrade-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn web_ui:app
+    envVars:
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+
