@@ -69,9 +69,18 @@ bot.place_oco_order("BTCUSDT", "SELL", 0.001, 110000, 95000, 94500)
 - Market and Limit orders
 - Stop-Limit orders (bonus)
 - OCO orders (bonus)
+- Web UI interface (bonus)
 - Input validation
 - Logging (console + file)
 - Error handling
+
+## Web UI (Bonus)
+
+```bash
+python web_ui.py
+```
+
+Open http://localhost:5000 in your browser.
 
 ## Project Structure
 
