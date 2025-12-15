@@ -25,6 +25,10 @@ def get_bot():
     if bot is None:
         api_key = os.getenv('BINANCE_API_KEY')
         api_secret = os.getenv('BINANCE_API_SECRET')
+        print(f"[DEBUG] API Key present: {bool(api_key)}, Secret present: {bool(api_secret)}")
+        if not api_key or not api_secret:
+            print("[ERROR] Missing BINANCE_API_KEY or BINANCE_API_SECRET environment variables!")
+            raise ValueError("Missing API credentials")
         bot = BasicBot(api_key, api_secret, testnet=True)
     return bot
 
@@ -536,10 +540,17 @@ HTML_TEMPLATE = '''
                 const res = await fetch('/api/account');
                 const data = await res.json();
                 
-                document.getElementById('balance').textContent = '$' + parseFloat(data.totalWalletBalance).toFixed(2);
-                document.getElementById('available').textContent = '$' + parseFloat(data.availableBalance).toFixed(2);
+                if (data.error) {
+                    document.getElementById('balance').textContent = 'API Error';
+                    document.getElementById('available').textContent = data.error.substring(0, 20);
+                    console.error('Account API Error:', data.error);
+                    return;
+                }
                 
-                const pnl = parseFloat(data.totalUnrealizedProfit);
+                document.getElementById('balance').textContent = '$' + parseFloat(data.totalWalletBalance || 0).toFixed(2);
+                document.getElementById('available').textContent = '$' + parseFloat(data.availableBalance || 0).toFixed(2);
+                
+                const pnl = parseFloat(data.totalUnrealizedProfit || 0);
                 const pnlEl = document.getElementById('pnl');
                 pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
                 pnlEl.className = 'stat-value ' + (pnl >= 0 ? '' : 'negative');
