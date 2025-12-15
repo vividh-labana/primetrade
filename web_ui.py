@@ -101,6 +101,7 @@ HTML_TEMPLATE = '''
             border-radius: 12px;
             padding: 20px;
             border: 1px solid rgba(255, 255, 255, 0.08);
+            overflow: hidden;
         }
         
         .card h2 {
@@ -156,7 +157,13 @@ HTML_TEMPLATE = '''
             margin-bottom: 12px;
         }
         
-        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 5px;
+            min-width: 0;
+            overflow: hidden;
+        }
         .form-group.full { grid-column: span 2; }
         
         label { font-size: 0.8rem; color: #888; }
@@ -168,6 +175,9 @@ HTML_TEMPLATE = '''
             background: rgba(0, 0, 0, 0.3);
             color: white;
             font-size: 0.95rem;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
         }
         
         input:focus, select:focus {
