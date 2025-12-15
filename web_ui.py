@@ -696,6 +696,7 @@ def api_account():
     try:
         return jsonify(get_bot().get_account_info())
     except Exception as e:
+        print(f"[ERROR] Account API failed: {type(e).__name__}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/price/<symbol>')
@@ -704,6 +705,7 @@ def api_price(symbol):
         price = get_bot().get_symbol_price(symbol)
         return jsonify({'symbol': symbol, 'price': price})
     except Exception as e:
+        print(f"[ERROR] Price API failed: {type(e).__name__}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/positions')
